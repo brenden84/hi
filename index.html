@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Bird with Proxy</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #222;
+            font-family: Arial, sans-serif;
+        }
+        
+        .container {
+            text-align: center;
+        }
+        
+        canvas {
+            border: 2px solid #fff;
+            background: #87CEEB;
+            display: block;
+            margin-bottom: 20px;
+        }
+        
+        .info {
+            color: #fff;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        
+        .status {
+            color: #ffff00;
+            font-size: 16px;
+        }
+        
+        .controls {
+            color: #aaa;
+            font-size: 14px;
+            margin-top: 15px;
+        }
+        
+        .proxy-mode {
+            color: #ff6600;
+            font-weight: bold;
+            padding: 10px;
+            background: #333;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <canvas id="gameCanvas" width="400" height="600"></canvas>
+        <div class="info">
+            <div>Score: <span id="score">0</span></div>
+            <div class="status" id="status">Click to play</div>
+            <div class="proxy-mode" id="proxyStatus">Normal Mode</div>
+        </div>
+        <div class="controls">
+            <p>Space/Click to flap | Press = to toggle proxy</p>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game variables
+        let gameRunning = false;
+        let score = 0;
+        let proxyMode = false;
+        
+        // Bird
+        const bird = {
+            x: 50,
+            y: 150,
+            width: 30,
+            height: 24,
+            velocityY: 0,
+            gravity: 0.5,
+            jumpPower: -10
+        };
+        
+        // Pipes
+        const pipes = [];
+        const pipeWidth = 50;
+        const pipeGap = 120;
+        const pipeDistance = 150;
+        let pipeCounter = 0;
+        
+        // Proxy mode variables
+        let proxyURL = '';
+        let proxyInput = null;
+        
+        // Event listeners
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                if (!gameRunning) {
+                    startGame();
+                } else {
+                    bird.velocityY = bird.jumpPower;
+                }
+            }
+            if (e.key === '=') {
+                toggleProxy();
+            }
+        });
+        
+        canvas.addEventListener('click', () => {
+            if (!gameRunning) {
+                startGame();
+            } else {
+                bird.velocityY = bird.jumpPower;
+            }
+        });
+        
+        function toggleProxy() {
+            proxyMode = !proxyMode;
+            const statusEl = document.getElementById('proxyStatus');
+            
+            if (proxyMode) {
+                statusEl.innerHTML = '🔐 PROXY MODE ACTIVE<br>Enter proxy URL (or press Enter to skip)';
+                proxyInput = prompt('Enter proxy URL (or leave blank):');
+                if (proxyInput) {
+                    proxyURL = proxyInput;
+                }
+                statusEl.innerHTML = '🔐 PROXY MODE ACTIVE' + (proxyURL ? '<br>URL: ' + proxyURL : '');
+            } else {
+                statusEl.innerHTML = 'Normal Mode';
+                proxyURL = '';
+            }
+        }
+        
+        function startGame() {
+            gameRunning = true;
+            score = 0;
+            bird.y = 150;
+            bird.velocityY = 0;
+            pipes.length = 0;
+            pipeCounter = 0;
+            document.getElementById('status').textContent = 'Game Running!';
+            gameLoop();
+        }
+        
+        function gameOver() {
+            gameRunning = false;
+            document.getElementById('status').textContent = 'Game Over! Final Score: ' + score;
+        }
+        
+        function gameLoop() {
+            update();
+            draw();
+            
+            if (gameRunning) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+        
+        function update() {
+            // Update bird
+            bird.velocityY += bird.gravity;
+            bird.y += bird.velocityY;
+            
+            // Check collisions with ground and ceiling
+            if (bird.y + bird.height > canvas.height || bird.y < 0) {
+                gameOver();
+                return;
+            }
+            
+            // Generate pipes
+            pipeCounter++;
+            if (pipeCounter > pipeDistance) {
+                const gapStart = Math.random() * (canvas.height - pipeGap - 100) + 50;
+                pipes.push({
+                    x: canvas.width,
+                    gapStart: gapStart,
+                    gapEnd: gapStart + pipeGap
+                });
+                pipeCounter = 0;
+            }
+            
+            // Update pipes
+            for (let i = pipes.length - 1; i >= 0; i--) {
+                pipes[i].x -= 4;
+                
+                // Check if pipe passed bird (score)
+                if (pipes[i].x + pipeWidth < bird.x && !pipes[i].scored) {
+                    pipes[i].scored = true;
+                    score++;
+                    document.getElementById('score').textContent = score;
+                }
+                
+                // Remove off-screen pipes
+                if (pipes[i].x + pipeWidth < 0) {
+                    pipes.splice(i, 1);
+                }
+            }
+            
+            // Check collision with pipes
+            for (let pipe of pipes) {
+                if (bird.x < pipe.x + pipeWidth && 
+                    bird.x + bird.width > pipe.x) {
+                    if (bird.y < pipe.gapStart || bird.y + bird.height > pipe.gapEnd) {
+                        gameOver();
+                        return;
+                    }
+                }
+            }
+        }
+        
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = proxyMode ? '#1a1a2e' : '#87CEEB';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            if (proxyMode) {
+                // Draw proxy mode effect
+                ctx.fillStyle = 'rgba(255, 102, 0, 0.1)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+            
+            // Draw bird
+            ctx.fillStyle = proxyMode ? '#ff6600' : '#FFDE00';
+            ctx.fillRect(bird.x, bird.y, bird.width, bird.height);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(bird.x + bird.width - 8, bird.y + 6, 4, 4);
+            
+            // Draw pipes
+            ctx.fillStyle = proxyMode ? '#ff00ff' : '#228B22';
+            for (let pipe of pipes) {
+                // Top pipe
+                ctx.fillRect(pipe.x, 0, pipeWidth, pipe.gapStart);
+                // Bottom pipe
+                ctx.fillRect(pipe.x, pipe.gapEnd, pipeWidth, canvas.height - pipe.gapEnd);
+            }
+            
+            // Draw ground
+            ctx.fillStyle = '#8B7355';
+            ctx.fillRect(0, canvas.height - 10, canvas.width, 10);
+        }
+    </script>
+</body>
+</html>
